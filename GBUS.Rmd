@@ -1,0 +1,422 @@
+---
+title: "draft"
+author: "Alekya Vadakattu"
+date: "2023-10-21"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+loan_data <- readRDS("C:\\Users\\apoor_b31k2hq\\Downloads\\loan_data.rds")
+```
+
+```{r}
+library(tidyverse)      # Includes dplyr, tidyr, ggplot2
+library(tidymodels)     # Includes yardstick, recipes, parsnip
+library(skimr)          
+library(vip)
+
+```
+
+```{r}
+dim(loan_data)
+str(loan_data)
+head(loan_data)
+glimpse(loan_data)
+skim(loan_data)
+summary(loan_data)
+```
+
+How do the distributions of loan amounts differ between customers who defaulted on their loans and those who did not?
+```{r}
+
+# Density Plot
+ggplot(loan_data, aes(x=loan_amount, fill=loan_default)) + 
+  geom_density(alpha=0.5) +
+  labs(title="Density Plot of Loan Amounts by Default Status", x="Loan Amount", y="Density") +
+  theme_minimal() +
+  scale_fill_manual(values=c("lightgreen", "lightblue"))
+
+```
+From the data, we observe that for smaller loan amounts, non-defaulters significantly outnumber those who defaulted. As the loan amount increases, this trend remains pronounced, suggesting that borrowers of smaller amounts tend to be more reliable in repayment. However, as we approach mid-range loan amounts, the disparity between defaulters and non-defaulters diminishes, pointing to a greater risk of default. Interestingly, for higher loan amounts, there are instances where defaulters outnumber non-defaulters, but this trend flips again for the very highest loan categories. This pattern highlights that while loan amount can influence default risk, there might be other factors at play that also significantly impact loan repayment behavior.
+
+
+How does the count of loan defaults vary between different loan terms, and can we observe any noticeable trends in the number of defaults for three-year vs. five-year loans?
+
+```{r}
+# Group by loan term and default status to get counts
+loan_data_summary <- loan_data %>%
+  group_by(term, loan_default) %>%
+  tally()
+
+# Bar Chart with Counts
+ggplot(loan_data_summary, aes(x=term, y=n, fill=loan_default)) +
+  geom_bar(stat="identity", position="dodge") +
+  geom_text(aes(label=n), position=position_dodge(width=0.9), vjust=-0.25) +
+  labs(title="Count of Loan Defaults by Loan Term", x="Loan Term", y="Count", fill="Loan Default") +
+  theme_minimal() +
+  theme(legend.position="top")
+
+
+```
+From the provided data, it's evident that three-year loans have a total of 693 defaults compared to 1,895 non-defaults. In contrast, five-year loans experience a more evenly distributed pattern with 837 defaults and 685 non-defaults. Thus, while three-year loans have a lower absolute count of defaults than five-year loans, the proportion of defaults to non-defaults is much higher for the five-year term. This suggests that while five-year loans might have more defaults in absolute numbers, they have a more balanced default-to-non-default ratio compared to three-year loans. In essence, borrowers taking up three-year loans seem to be more reliable in repayments, while five-year loans present a heightened risk of default.
+
+
+
+What are the approval rates for loans based on homeownership status, and how do the counts of approved and defaulted loans differ among various homeownership categories?
+```{r}
+# Summary Data Frame for Homeownership
+loan_data_summary <- loan_data %>%
+  group_by(homeownership, loan_default) %>%
+  summarise(count=n()) %>%
+  spread(loan_default, count) %>%
+  mutate(Approval_Rate = `yes` / (`yes` + `no`))
+
+loan_data_summary
+
+```
+Among the various homeownership categories, it's evident that the propensity to default varies. Individuals with a mortgage exhibit an approval rate of approximately 32.42%, with 628 having defaulted on their loans contrasted against a larger group of 1,309 who successfully honored their commitments. Interestingly, renters present the highest susceptibility to default, with an approval rate of around 42.80%. In this group, 713 borrowers defaulted, which, when compared to the 953 who remained consistent in their repayments, indicates a more balanced default-to-non-default ratio. On the other hand, homeowners who fully own their property have a default rate of 37.28%, marked by 189 defaults against 318 non-defaults. This distribution suggests that while renters are the most likely to default, mortgage holders, despite having the lowest approval rate, often prove to be more reliable in repaying their loans.
+
+
+
+How does the loan default rate vary across different loan purposes?
+```{r}
+
+
+loan_purpose_summary <- loan_data %>%
+  group_by(loan_purpose, loan_default) %>%
+  tally() %>%
+  spread(loan_default, n) %>%
+  mutate(approval_rate = `yes` / (`yes` + `no`))
+
+loan_purpose_summary
+
+
+```
+
+```{r}
+# Assuming loan_data is the name of your data frame
+loan_purpose_count <- loan_data %>%
+  group_by(loan_purpose, loan_default) %>%
+  summarise(count = n()) %>%
+  ungroup()
+
+# Create the side-by-side bar plot
+ggplot(loan_purpose_count, aes(x = loan_purpose, y = count, fill = loan_default)) +
+  geom_bar(stat = "identity", position = "dodge", width = 0.6) +
+  geom_text(aes(label = count, y = count + 50), position = position_dodge(width = 0.6), vjust = 0) + 
+  labs(title = "Loan Default Rate by Loan Purpose",
+       x = "Loan Purpose",
+       y = "Count of Loans") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  scale_fill_manual(values = c("yes" = "lightblue", "no" = "lightgreen"), name = "Loan Default")
+
+
+```
+The loan default rate varies significantly across different loan purposes. For "debt consolidation", the default rate is approximately 25.3%, suggesting that about one in four individuals default on their loans intended for this purpose. "Credit card" loans have a noticeably higher default rate at approximately 53.5%, which means more than half of the borrowers default on these loans. The highest default rate is observed for "medical" loans, where around 60.5% of borrowers default. On the other hand, "small business" loans have a default rate of approximately 25.9%, and "home improvement" loans have a default rate of around 28%. These insights indicate that loans taken out for medical purposes or to pay off credit card debt have the highest default rates, whereas loans for small business and home improvement are comparatively safer.
+
+
+How does the average loan amount differ between borrowers who defaulted and those who did not, across various loan purposes?
+```{r}
+loan_purpose_amount_summary <- loan_data %>%
+  group_by(loan_purpose, loan_default) %>%
+  summarise(average_loan_amount = mean(loan_amount, na.rm = TRUE),
+            total_count = n())
+
+loan_purpose_amount_summary
+
+```
+
+```{r}
+ggplot(loan_purpose_amount_summary, aes(x=loan_purpose, y=average_loan_amount, fill=loan_default)) +
+  geom_bar(stat="identity", position="dodge") +
+  geom_text(aes(label=sprintf("%.2f", average_loan_amount)), position=position_dodge(width=0.9), vjust=-0.25, size=2.5) +  # Adjusted font size
+  labs(title="Average Loan Amount by Loan Purpose and Default Status", x="Loan Purpose", y="Average Loan Amount", fill="Loan Default") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  scale_fill_manual(values=c("yes" = "grey", "no" = "black"))  # Adjusted colors
+
+
+
+```
+
+In examining the various loan purposes, distinct patterns emerge regarding the average loan amounts between borrowers who defaulted and those who did not. For "debt consolidation" loans, defaulters typically borrowed more, with an average of $17,704.38, compared to the $16,224.37 average of those who stayed current. A similar trend is seen in the "credit card" category, where the average loan amount for defaulters stands at $17,076.44, marginally higher than the $16,173.35 for non-defaulters. The "medical" loan purpose also reveals a slight difference, with defaulters having borrowed an average of $17,058.27, as opposed to the $16,635.06 average for non-defaulters. Interestingly, "small business" loans show a more pronounced difference with defaulters borrowing an average of $18,350.90, in contrast to non-defaulters who borrowed around $16,116.26 on average. Lastly, for "home improvement" purposes, defaulters borrowed an average of $17,754.59, which is again higher than the $16,329.89 average for those who did not default. These nuances underscore the importance of loan purpose in understanding borrowing behaviors and default risks.
+
+----------------------------------------------------------------------------
+
+RANDOM FOREST
+
+
+
+```{r}
+# 1. Data Splitting
+set.seed(123)
+data_split <- initial_split(loan_data, prop = 0.75)
+train_data <- training(data_split)
+test_data <- testing(data_split)
+```
+
+```{r}
+# 2. Feature Engineering Pipeline with Recipes
+recipe <- recipe(loan_default ~ ., data = train_data) %>%
+  step_dummy(all_nominal(), -all_outcomes()) %>%
+  step_center(all_numeric(), -all_outcomes()) %>%
+  step_scale(all_numeric(), -all_outcomes())
+```
+
+```{r}
+# 3. Specify a Parsnip Model Object
+model <- rand_forest(trees = 1000) %>%
+  set_mode("classification") %>%
+  set_engine("ranger")
+```
+
+```{r}
+# 4. Workflow
+workflow <- workflow() %>%
+  add_recipe(recipe) %>%
+  add_model(model)
+```
+
+```{r}
+install.packages("ranger")
+
+```
+```{r}
+library("dials")
+library("rsample")
+library("tune")
+
+
+```
+
+
+```{r}
+library(dials)
+library(rsample)
+library(tune)
+
+# 5. Hyperparameter Tuning (assuming you want to tune mtry, min_n)
+
+rf_param_grid <- parameters(
+  mtry(range = c(1, floor(sqrt(ncol(train_data) - 1)))),
+  trees(),
+  min_n(range = c(1, 10))
+)
+
+# Generate a random grid of size 10 from these hyperparameters
+set.seed(123)
+grid <- grid_random(rf_param_grid, size = 10)
+folds <- vfold_cv(train_data, v = 5)
+
+
+# Now, perform hyperparameter tuning using this grid
+tuned_results <- tune_grid(
+  workflow,
+  resamples = folds,
+  grid = grid
+)
+
+best_params <- select_best(tuned_results, "roc_auc")
+final_workflow <- finalize_workflow(workflow, best_params)
+
+
+```
+
+```{r}
+# 6. Model Evaluation
+# Extract the tibble
+preds_tibble <- test_preds[[1]]
+
+# Compute the ROC curve using yardstick
+roc_curve_data <- roc_curve(preds_tibble, truth = loan_default, .pred_yes)
+
+# Plot the ROC curve
+
+ggplot(roc_curve_data, aes(x = 1 - specificity, y = sensitivity)) +
+  geom_line() +
+  geom_abline(linetype = "dashed", color = "red") + 
+  labs(title = "ROC Curve", x = "False Positive Rate", y = "True Positive Rate") +
+  theme_minimal()
+accuracy_value <- accuracy(preds_tibble, truth = loan_default, estimate = .pred_class)
+print(accuracy_value)
+
+```
+
+```{r}
+# Assuming you've already fit your final_workflow to your data
+final_results_rf <- last_fit(final_workflow, data_split)
+
+# Extract predictions from final_results_rf
+rf_predictions <- final_results_rf %>% collect_predictions()
+
+# Compute the confusion matrix
+confusion_matrix_rf <- conf_mat(rf_predictions, truth = loan_default, estimate = .pred_class)
+
+# Define color palette and create heatmap
+color_palette <- c("#9F6841", "#DA680F", "#9F6841", "#DA680F")
+heatmap_plot_rf <- autoplot(confusion_matrix_rf, type = 'heatmap') +
+  scale_fill_gradient(low = color_palette[1], high = color_palette[length(color_palette)]) +
+  labs(title = "Random Forest Confusion Matrix Heatmap", 
+       x = "Predicted", y = "Actual") +
+  theme_minimal()
+
+# Print the heatmap
+print(heatmap_plot_rf)
+
+```
+
+```{r}
+
+var_importance <- vip(loan_data_train_model, geom = "col", fill = "Variable")
+
+# Custom color palette
+color_palette <- c("#167288", "#b45248", "#3cb464", "#643c6a","#d6cfa2", "#836394","#9bddb1", "#a89a49","#8cdaec", "#d48c84")  # Example color palette
+
+# VIP plot with custom colors
+vip_plot <- ggplot(var_importance$data, aes(x = reorder(Variable, -Importance), y = Importance, fill = Variable)) +
+  geom_col() +
+  scale_fill_manual(values = color_palette) +
+  labs(x = "Variable", y = "Importance", title = "Variable Importance") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+print(vip_plot)
+
+# 6. Predict outcome categories
+class_preds <- predict(logistic_fit, new_data = test_data, type = 'class')
+
+# 7. Obtaining estimated probabilities for each outcome value
+prob_preds <- predict(logistic_fit, new_data = test_data, type = 'prob')
+
+# 8. Combining test set results
+loan_data_results <- test_data %>%
+  select(loan_default) %>%
+  bind_cols(class_preds, prob_preds)
+
+loan_data_results
+
+
+```
+
+
+
+DECISION TREE
+
+```{r}
+#Specify a Parsnip Model Object for Decision Tree
+model_tree <- decision_tree(cost_complexity = 0.01, 
+                            tree_depth = 5, 
+                            min_n = 10) %>%
+  set_mode("classification") %>%
+  set_engine("rpart")
+```
+
+
+```{r}
+#Workflow for Decision Tree
+workflow_tree <- workflow() %>%
+  add_recipe(recipe) %>%
+  add_model(model_tree)
+```
+
+```{r}
+#Hyperparameter Tuning for Decision Tree 
+
+set.seed(123)
+folds <- vfold_cv(train_data, v = 5)
+
+grid_tree <- grid_regular(
+  tree_depth(range = c(1, 10)),
+  min_n(range = c(2, 50)),
+  levels = 5
+)
+
+tuned_results_tree <- tune_grid(
+  workflow_tree,
+  resamples = folds,
+  grid = grid_tree
+)
+
+best_params_tree <- select_best(tuned_results_tree, "roc_auc")
+final_workflow_tree <- finalize_workflow(workflow_tree, best_params_tree)
+
+```
+```{r}
+
+
+# Collect Metrics and Predictions
+final_metrics_tree <- final_results_tree %>% collect_metrics()
+final_predictions_tree <- final_results_tree %>% collect_predictions()
+
+# Plot ROC Curve
+roc_curve_data <- final_predictions_tree %>%
+  roc_curve(truth = loan_default, .pred_yes)
+
+ggplot(roc_curve_data, aes(x = 1 - specificity, y = sensitivity)) +
+  geom_line() +
+  labs(title = "ROC Curve for Decision Tree Model",
+       x = "False Positive Rate",
+       y = "True Positive Rate") +
+  theme_minimal()
+
+# Calculate AUC
+auc_score <- final_predictions_tree %>%
+  roc_auc(truth = loan_default, .pred_yes)
+
+print(auc_score)
+
+```
+
+```{r}
+# Assuming the required libraries are already loaded
+
+
+# Extract predictions from final_results_tree
+tree_predictions <- final_results_tree %>% collect_predictions()
+
+# Compute the confusion matrix
+confusion_matrix_tree <- conf_mat(tree_predictions, truth = loan_default, estimate = .pred_class)
+
+# Define color palette and create heatmap
+color_palette <- c("#9F6841", "#DA680F", "#9F6841", "#DA680F")
+heatmap_plot_tree <- autoplot(confusion_matrix_tree, type = 'heatmap') +
+  scale_fill_gradient(low = color_palette[1], high = color_palette[length(color_palette)]) +
+  labs(title = "Decision Tree Confusion Matrix Heatmap")
+
+# Print the heatmap
+print(heatmap_plot_tree)
+
+
+```
+
+```{r}
+
+# Fit the finalized workflow to the training data
+final_workflow_tree <- final_workflow_tree %>%
+  fit(data = train_data)
+
+
+# Assuming final_workflow_tree has been fitted already
+tree_fit <- pull_workflow_fit(final_workflow_tree)
+
+# Extracting variable importance
+var_importance <- vip(tree_fit, geom = "col", fill = "Variable")
+
+# Custom color palette
+color_palette <- c("#167288", "#b45248", "#3cb464", "#643c6a","#d6cfa2", "#836394","#9bddb1", "#a89a49","#8cdaec", "#d48c84")  # Example color palette
+
+# VIP plot with custom colors
+vip_plot <- ggplot(var_importance$data, aes(x = reorder(Variable, -Importance), y = Importance, fill = Variable)) +
+  geom_col() +
+  scale_fill_manual(values = color_palette) +
+  labs(x = "Variable", y = "Importance", title = "Variable Importance for Decision Tree Model") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+print(vip_plot)
+
+```
+
