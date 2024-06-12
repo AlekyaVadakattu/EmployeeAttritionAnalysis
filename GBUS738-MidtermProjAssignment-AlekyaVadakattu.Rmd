@@ -1,0 +1,186 @@
+---
+title: "Midterm Project Analysis"
+author: "Alekya Vadakattu"
+date: "2023-10-09"
+output:
+  word_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+# Load required libraries
+library(dplyr)
+library(skimr)
+library(ggplot2)
+```
+
+```{r}
+#load the dataset
+employee_data<-read.csv("~/Downloads/EmployeeData.csv")
+```
+
+```{r}
+# View the first few rows of the dataset
+head(employee_data)
+```
+
+```{r}
+# Get the dimensions of the dataset (number of rows and columns)
+dim(employee_data)
+```
+
+```{r}
+# Get the structure of the dataset (data types of each column)
+str(employee_data)
+```
+
+```{r}
+# Get a concise summary of the dataset (data types, missing values, etc.)
+skim(employee_data)
+```
+
+```{r}
+# Get a detailed summary of numeric columns
+summary(employee_data)
+```
+
+```{r}
+# You can also get summary statistics for specific columns if needed
+summary(employee_data$salary)
+summary(employee_data$weekly_hours)
+```
+```{r}
+#Data Preparation
+# Check for missing values in the job_satisfaction column
+left_data <- employee_data[employee_data$left_company == "Yes", ]
+stayed_data <- employee_data[employee_data$left_company == "No", ]
+
+sum(is.na(left_data$job_satisfaction))
+sum(is.na(stayed_data$job_satisfaction))
+
+```
+
+```{r}
+#Summary of Data
+summary(left_data$job_satisfaction)
+summary(stayed_data$job_satisfaction)
+```
+
+```{r}
+#Question1 : 1.	Are employees who departed the company generally earning lower average salaries than those who remained employed?
+
+#data Preparation
+left_data <- employee_data[employee_data$left_company == "Yes", ]
+stayed_data <- employee_data[employee_data$left_company == "No", ]
+
+summary(left_data$salary)
+summary(stayed_data$salary)
+```
+```{r}
+#visualizing the data using box plot 
+boxplot(salary ~ left_company, data = employee_data, 
+        main = "Salary vs. Employee Attrition",
+        xlab = "Number of Employees who left Company", ylab = "Salary")
+
+```
+
+```{r}
+#Question 2: Is there a pattern where employees with fewer years at the company are more likely to leave?
+
+#Summary Statistics of the data  
+summary(left_data$yrs_at_company)
+summary(stayed_data$yrs_at_company)
+```
+```{r}
+#visualizing using a Histogram 
+par(mfrow = c(1, 2))  # Create a side-by-side plot
+hist(left_data$yrs_at_company, main = "Years at Company - Left", xlab = "Years")
+hist(stayed_data$yrs_at_company, main = "Years at Company - Stayed", xlab = "Years")
+```
+```{r}
+#Question 3: Are single employees more likely to leave the company compared to married employees?
+#Summary Statistics
+table(left_data$marital_status)
+table(stayed_data$marital_status)
+```
+```{r}
+#Performing a Chi-Square Test 
+chisq.test(table(employee_data$left_company, employee_data$marital_status))
+```
+```{r}
+#Question 4: Are there specific departments or job levels where employee turnover is higher or lower than average?
+
+#Summary Statistics 
+table(left_data$department)
+table(stayed_data$department)
+
+```
+```{r}
+#Visualizing using barplot
+barplot(table(employee_data$left_company, employee_data$department),
+        beside = TRUE, legend = FALSE,
+        main = "Employee Attrition by Department",
+        xlab = "Department", ylab = "Count",
+        col = c("blue", "orange"))
+```
+```{r}
+#Question 5: Is there a correlation between employee attrition and their present salary level?
+
+# Summary Table
+employee_data %>% group_by(left_company) %>%
+  summarise(n_employees = n(),
+            min_salary = min(salary),
+            avg_salary = mean(salary),
+            max_salary = max(salary),
+            sd_salary = sd(salary),
+            pct_less_60k = mean(salary <= 60000))
+```
+```{r}
+# Data Visualization
+ggplot(data = employee_data, aes(x = salary, fill = left_company)) +
+  geom_histogram(aes(y = ..density..), color = "white", bins = 20) +
+  facet_wrap(~ left_company, nrow = 2) +
+  labs(title = "Employee Salary Distribution by Status (Left the Comapny - Yes/No)",
+       x = "Salary (US Dollars", y = "Proportion of Employees")
+```
+```{r}
+#The association between an employee's departure from the company and their department
+
+# Create a contingency table of department and employee attrition
+contingency_table <- table(employee_data$department, employee_data$left_company)
+
+# Perform a chi-squared test
+chi_sq <- chisq.test(contingency_table)
+
+# View the chi-squared test result
+chi_sq
+
+```
+```{r}
+#The relationship between employee attrition and both their department and job level simultaneously.
+
+#Grouped bar plot to visualize attrition by department and job level
+ggplot(employee_data, aes(x = department, fill = left_company)) +
+  geom_bar(position = "dodge") +
+  facet_wrap(~ job_level) +
+  labs(
+    title = "Employee Attrition by Department and Job Level",
+    x = "Department",
+    y = "Count",
+    fill = "Employee Left"
+  ) +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))  # Rotate x-axis labels for readability
+
+```
+
+
+
+
+
+
+
